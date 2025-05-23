@@ -1,196 +1,176 @@
-# 🚀 Deploy Hello World no Google Cloud Run (Padrão FoundLab)
+# 🚀 Deploy MVP ScoreLab/FoundLab no Google Cloud Run
 
-Este projeto é um **MVP mínimo** com FastAPI, pronto para deploy no Google Cloud Run.
-
----
-
-## 🔖 Requisitos
-
-* Conta Google com acesso ao Google Cloud Platform
-* Docker instalado ([Download Docker Desktop](https://www.docker.com/products/docker-desktop/))
-* Google Cloud SDK ([Guia de instalação](https://cloud.google.com/sdk/docs/install))
-* Projeto criado no GCP (budget travado para teste!)
-* Permissões mínimas: Editor, Cloud Run Admin, Artifact Registry Admin
+Este projeto é uma evolução do Hello World: agora temos um endpoint institucional (/score), pronto para simular integração real de produto.
 
 ---
 
-## 📂 Estrutura do Projeto
+## 🆙 Mudanças: do Hello World para MVP ScoreLab
 
+* **Antes:** Endpoint `/` retornava `{ "message": "Deploy funcionando!" }`
+* **Agora:** Endpoint `/score` retorna payload institucional:
+
+  ```json
+  {
+    "score": 742,
+    "status": "aprovado",
+    "timestamp": "2024-05-22T22:00:00.000Z",
+    "message": "Simulação de score para demo institucional"
+  }
+  ```
+
+* Pronto para demo, integração ou uso por investidor/parceiro.
+
+---
+
+## 🔄 Como alterar rotas, payloads e variáveis
+
+### Alterar a rota
+
+No `app.py`, mude o decorator:
+
+```python
+@app.get("/score")  # Altere "/score" para outro endpoint
 ```
-cloudrun-hello/
-├── app.py
-├── Dockerfile
-├── requirements.txt
+
+### Alterar o payload
+
+No `app.py`, altere ou adicione campos no dicionário `response`:
+
+```python
+response = {
+    "score": 800,
+    "status": "pendente",
+    "timestamp": datetime.utcnow().isoformat() + "Z",
+    "message": "Payload customizado para teste"
+}
 ```
 
----
+### Usar variáveis de ambiente
 
-## 1️⃣ Clonar ou baixar o repositório
+Se quiser ler variáveis sensíveis (API\_KEY, url, etc):
 
-Se estiver no GitHub:
+* Adicione ao Dockerfile:
+
+```dockerfile
+ENV API_KEY=chave-exemplo
+```
+
+* E no Python:
+
+```python
+import os
+api_key = os.getenv("API_KEY")
+```
+
+Inclua as variáveis no deploy:
 
 ```sh
-git clone https://github.com/seuuser/cloudrun-hello.git
-cd cloudrun-hello
+gcloud run deploy hello-world --image $env:IMAGE_URI --region=us-central1 --allow-unauthenticated --set-env-vars API_KEY=chave-exemplo
 ```
-
-Ou baixe e extraia o .zip nesta pasta.
 
 ---
 
-## 2️⃣ Testar localmente (opcional, mas recomendado)
+## ➕ Dependências adicionais
+
+* FastAPI
+* Uvicorn
+* Se integrar com API externa, adicione ao `requirements.txt`:
+
+  ```
+  requests
+  ```
+
+  E use no código:
+
+  ```python
+  import requests
+  ```
+
+---
+
+## 🔗 Simulação de integração
+
+### Comando curl
 
 ```sh
-python -m venv venv
-# Ative o venv (Windows)
-venv\Scripts\activate
-# Instale dependências
-pip install -r requirements.txt
-# Rode o app
-uvicorn app:app --reload --port 8080
+curl https://SUA-URL-CLOUDRUN/score
 ```
 
-Abra [http://localhost:8080](http://localhost:8080)
-Resposta esperada: `{"message":"Deploy funcionando!"}`
+### Script Python
+
+```python
+import requests
+resp = requests.get("https://SUA-URL-CLOUDRUN/score")
+print(resp.json())
+```
+
+### Exemplo de consumo por parceiro (mock fintech)
+
+```python
+def consultar_score(cliente_id):
+    url = "https://SUA-URL-CLOUDRUN/score"
+    response = requests.get(url)
+    if response.status_code == 200:
+        resultado = response.json()
+        if resultado["score"] >= 700:
+            return "Cliente aprovado"
+        else:
+            return "Cliente recusado"
+    else:
+        return "Erro na integração"
+
+print(consultar_score("123456789"))
+```
 
 ---
 
-## 3️⃣ Login no Google Cloud e configuração
+## 🔐 Segurança e shutdown
+
+### Como proteger o endpoint (Cloud Run)
+
+**Opção 1: Deixar privado (sem --allow-unauthenticated)**
 
 ```sh
-gcloud init
-gcloud auth login
-gcloud config set project SEU_PROJECT_ID
+gcloud run deploy hello-world --image $env:IMAGE_URI --region=us-central1
 ```
 
-*Substitua `SEU_PROJECT_ID` pelo id do seu projeto.*
+**Opção 2: Auth básica (token simples)**
+No app.py:
 
----
+```python
+from fastapi import Header, HTTPException
 
-## 4️⃣ Criar repositório Docker no Artifact Registry (uma vez por projeto)
+@app.get("/score")
+def get_score(x_api_key: str = Header(None)):
+    if x_api_key != "SUA_CHAVE_SECRETA":
+        raise HTTPException(status_code=401, detail="Não autorizado")
+    # ...payload normal...
+```
+
+No curl:
 
 ```sh
-gcloud artifacts repositories create hello-repo \
-  --repository-format=docker \
-  --location=us-central1
+curl -H "x-api-key: SUA_CHAVE_SECRETA" https://SUA-URL-CLOUDRUN/score
 ```
 
-*Se já criou antes, pode pular.*
+> Nunca suba chave secreta em código público! Use variáveis de ambiente em produção.
 
----
+### Shutdown (nunca deixe rodando à toa)
 
-## 5️⃣ Configurar Docker para autenticar no Artifact Registry
+Sempre execute:
 
 ```sh
-gcloud auth configure-docker us-central1-docker.pkg.dev
+./shutdown.sh
+# ou
+ gcloud run services delete hello-world --platform=managed --region=us-central1 -q
 ```
 
 ---
 
-## 6️⃣ Definir variáveis de ambiente no PowerShell
+## ✅ Checklist FoundLab MVP
 
-```powershell
-$env:PROJECT_ID = (gcloud config get-value project)
-$env:REGION = "us-central1"
-$env:REPO = "hello-repo"
-$env:IMAGE_NAME = "hello-world"
-$env:IMAGE_URI = "$env:REGION-docker.pkg.dev/$env:PROJECT_ID/$env:REPO/$env:IMAGE_NAME`:latest"
-```
-
-*No Linux/Mac/bash, use sintaxe sem `$env:` e sem o acento grave antes dos dois pontos.*
-
----
-
-## 7️⃣ Build da imagem Docker
-
-```sh
-docker build -t $env:IMAGE_URI .
-```
-
----
-
-## 8️⃣ Push da imagem para o Artifact Registry
-
-```sh
-docker push $env:IMAGE_URI
-```
-
----
-
-## 9️⃣ Deploy no Cloud Run
-
-```sh
-gcloud run deploy hello-world \
-  --image $env:IMAGE_URI \
-  --platform=managed \
-  --region=us-central1 \
-  --allow-unauthenticated
-```
-
-* Anote a URL retornada pelo comando (será do tipo `https://hello-world-xxxx.a.run.app`).
-
----
-
-## 🔟 Teste a aplicação
-
-Acesse a URL pública no navegador.
-Resposta esperada:
-
-```json
-{"message":"Deploy funcionando!"}
-```
-
----
-
-## 🛑 Como desligar/deletar o serviço (shutdown)
-
-
-```sh
-gcloud run services delete hello-world --platform=managed --region=us-central1 -q
-```
-
-Isso apaga o serviço Cloud Run e para qualquer cobrança.
-
----
-
-## 🪤 Erros comuns e soluções
-
-* **Imagem não encontrada no deploy**
-
-  * Certifique-se de ter feito o `docker push` corretamente, e que a variável `$env:IMAGE_URI` está certinha.
-* **Permissão negada**
-
-  * Rode novamente `gcloud auth configure-docker us-central1-docker.pkg.dev` e faça login com a conta correta.
-* **Region/repo diferente**
-
-  * Mantenha tudo como `us-central1` para evitar erro.
-* **Cloud Run não aparece**
-
-  * Confirme que a API Cloud Run está ativada no seu projeto.
-
----
-
-## 📸 Prints ou GIFs (opcional, recomendado)
-
-![alt text](image.png)
-![alt text](image-1.png)
-![alt text](image-2.png)
----
-
-## 🔗 Referências
-
-* [Deploy no Cloud Run (doc oficial)](https://cloud.google.com/run/docs/quickstarts/build-and-deploy)
-* [FastAPI](https://fastapi.tiangolo.com/)
-* [Docker](https://docs.docker.com/)
-
----
-
-## ✅ Checklist para FoundLab
-
-* [x] App mínimo funcional FastAPI/Flask
-* [x] Dockerfile + requirements.txt
-* [x] Push e deploy via GCP
-* [x] Script de shutdown
-* [x] README ultra-didático
-* [x] Prints/gif opcionais
-
+* [x] Endpoint `/score` com payload realista/documentado
+* [x] README explica como mudar rota/payload/variáveis
+* [x] Simulação de integração (curl, Python)
+* [x] Orientação de segurança e shutdown
+* [x] Founder/dev consegue alterar, testar e desligar sem depender de ninguém
