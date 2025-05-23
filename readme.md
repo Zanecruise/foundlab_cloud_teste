@@ -21,7 +21,6 @@ cloudrun-hello/
 ├── app.py
 ├── Dockerfile
 ├── requirements.txt
-└── shutdown.sh
 ```
 
 ---
